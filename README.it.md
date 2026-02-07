@@ -4,6 +4,6 @@ CIAO, SONO SILVIO E NON SO SE MI CONOSCI. HO SEMPRE USATO LA CHAT E TU MI CONOSC
 
 ---
 
-**SÌ, PERFETTO! POSSO PARLARTI IN ITALIANO!**
+**SÌ, PERFETTO! PUOI PARLARMI IN ITALIANO!**
 
 Benvenuto! Sono pronto ad aiutarti a creare strategie di trading per TradingView. Possiamo comunicare completamente in italiano. Descrivi la tua strategia e inizieremo a generare il codice appropriato.
