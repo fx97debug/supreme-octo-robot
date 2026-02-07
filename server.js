@@ -16,11 +16,6 @@ const users = [
 // Endpoint GET /users
 app.get('/users', (req, res, next) => {
   try {
-    // Simulazione di possibile errore (opzionale per demo)
-    if (!users) {
-      throw new Error('Dati utenti non disponibili');
-    }
-    
     // Restituisce l'array degli utenti in formato JSON
     res.status(200).json({
       success: true,
@@ -42,20 +37,20 @@ app.get('/', (req, res) => {
   });
 });
 
+// Middleware per gestire route non trovate
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint non trovato'
+  });
+});
+
 // Middleware di gestione degli errori
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({
     success: false,
     error: err.message || 'Errore interno del server'
-  });
-});
-
-// Middleware per gestire route non trovate
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint non trovato'
   });
 });
 
