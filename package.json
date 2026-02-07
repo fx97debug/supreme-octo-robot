@@ -1,0 +1,26 @@
+{
+  "name": "supreme-octo-robot",
+  "version": "1.0.0",
+  "description": "REST API in Node.js con Express per gestione utenti",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fx97debug/supreme-octo-robot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/fx97debug/supreme-octo-robot/issues"
+  },
+  "homepage": "https://github.com/fx97debug/supreme-octo-robot#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
