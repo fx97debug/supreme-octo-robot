@@ -1,0 +1,584 @@
+//@version=6
+indicator("Pattern Armonici + TP/SL + PRZ + Conferme", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ==================== IMPOSTAZIONI ====================
+// Pattern Armonici
+showGartley = input.bool(true, "Mostra Gartley", group="Pattern Armonici")
+showButterfly = input.bool(true, "Mostra Butterfly", group="Pattern Armonici")
+showBat = input.bool(true, "Mostra Bat", group="Pattern Armonici")
+showCrab = input.bool(true, "Mostra Crab", group="Pattern Armonici")
+showShark = input.bool(true, "Mostra Shark", group="Pattern Armonici")
+showCypher = input.bool(true, "Mostra Cypher", group="Pattern Armonici")
+
+lookbackPeriod = input.int(50, "Periodo Lookback", minval=10, maxval=200, group="Pattern Armonici")
+errorTolerance = input.float(0.05, "Tolleranza Errore (%)", minval=0.01, maxval=0.15, step=0.01, group="Pattern Armonici")
+
+// Gestione Trade
+stopLossPercent = input.float(2, "Stop Loss (%)", minval=0.5, maxval=5, step=0.1, group="Gestione Trade", tooltip="% sotto/sopra il punto D")
+
+// Conferme - RSI
+rsiPeriod = input.int(14, "Periodo RSI", group="Conferme RSI")
+rsiOversoldLevel = input.float(35, "RSI Ipervenduto", minval=20, maxval=40, group="Conferme RSI")
+rsiOverboughtLevel = input.float(65, "RSI Ipercomprato", minval=60, maxval=80, group="Conferme RSI")
+rsiBullishExit = input.float(40, "RSI Soglia Uscita Bullish", minval=30, maxval=50, group="Conferme RSI")
+rsiBearishExit = input.float(60, "RSI Soglia Uscita Bearish", minval=50, maxval=70, group="Conferme RSI")
+
+// Conferme - Volume
+volumeMA = input.int(20, "Periodo MA Volume", group="Conferme Volume")
+volumeMultiplier = input.float(1.0, "Moltiplicatore Volume", minval=0.5, maxval=3.0, step=0.1, group="Conferme Volume", tooltip="Volume deve essere X volte la media")
+
+// Conferme - MACD
+macdFast = input.int(12, "MACD Fast", group="Conferme MACD")
+macdSlow = input.int(26, "MACD Slow", group="Conferme MACD")
+macdSignal = input.int(9, "MACD Signal", group="Conferme MACD")
+macdCrossLookback = input.int(2, "MACD Cross Lookback", minval=1, maxval=5, group="Conferme MACD", tooltip="Cerca crossover nelle ultime N candele")
+
+// Visualizzazione
+showExpiredPatterns = input.bool(true, "Mostra Pattern Non Confermati", group="Visualizzazione")
+showDashboard = input.bool(true, "Mostra Dashboard", group="Visualizzazione")
+dashPosition = input.string("Top Right", "Posizione Dashboard", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group="Visualizzazione")
+
+// ==================== CALCOLI INDICATORI ====================
+rsi = ta.rsi(close, rsiPeriod)
+
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSignal)
+
+volMA = ta.sma(volume, volumeMA)
+
+ema50 = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+
+// ==================== FUNZIONI FIBONACCI ====================
+checkFibRatio(float actual, float expected, float tolerance) =>
+    math.abs(actual - expected) / expected <= tolerance
+
+// ==================== IDENTIFICAZIONE PIVOT ====================
+pivotHigh = ta.pivothigh(high, 5, 1)
+pivotLow = ta.pivotlow(low, 5, 1)
+
+var array<float> highPoints = array.new<float>(0)
+var array<int> highBars = array.new<int>(0)
+var array<float> lowPoints = array.new<float>(0)
+var array<int> lowBars = array.new<int>(0)
+
+if not na(pivotHigh)
+    array.unshift(highPoints, pivotHigh)
+    array.unshift(highBars, bar_index - 5)
+    if array.size(highPoints) > lookbackPeriod
+        array.pop(highPoints)
+        array.pop(highBars)
+
+if not na(pivotLow)
+    array.unshift(lowPoints, pivotLow)
+    array.unshift(lowBars, bar_index - 5)
+    if array.size(lowPoints) > lookbackPeriod
+        array.pop(lowPoints)
+        array.pop(lowBars)
+
+// ==================== FUNZIONI PATTERN ARMONICI ====================
+detectGartley(float x, float a, float b, float c, float d, int xBar, int aBar, int bBar, int cBar, int dBar, bool isBullish) =>
+    xaLen = math.abs(a - x)
+    abLen = math.abs(b - a)
+    bcLen = math.abs(c - b)
+    cdLen = math.abs(d - c)
+    xbRatio = abLen / xaLen
+    acRatio = bcLen / abLen
+    xdRatio = cdLen / xaLen
+    isGartley = checkFibRatio(xbRatio, 0.618, errorTolerance) and (checkFibRatio(acRatio, 0.382, errorTolerance) or checkFibRatio(acRatio, 0.886, errorTolerance)) and checkFibRatio(xdRatio, 0.786, errorTolerance)
+    isGartley
+
+detectButterfly(float x, float a, float b, float c, float d, int xBar, int aBar, int bBar, int cBar, int dBar, bool isBullish) =>
+    xaLen = math.abs(a - x)
+    abLen = math.abs(b - a)
+    bcLen = math.abs(c - b)
+    cdLen = math.abs(d - c)
+    xbRatio = abLen / xaLen
+    acRatio = bcLen / abLen
+    xdRatio = cdLen / xaLen
+    isButterfly = checkFibRatio(xbRatio, 0.786, errorTolerance) and (checkFibRatio(acRatio, 0.382, errorTolerance) or checkFibRatio(acRatio, 0.886, errorTolerance)) and (checkFibRatio(xdRatio, 1.27, errorTolerance) or checkFibRatio(xdRatio, 1.618, errorTolerance))
+    isButterfly
+
+detectBat(float x, float a, float b, float c, float d, int xBar, int aBar, int bBar, int cBar, int dBar, bool isBullish) =>
+    xaLen = math.abs(a - x)
+    abLen = math.abs(b - a)
+    bcLen = math.abs(c - b)
+    cdLen = math.abs(d - c)
+    xbRatio = abLen / xaLen
+    acRatio = bcLen / abLen
+    xdRatio = cdLen / xaLen
+    isBat = (checkFibRatio(xbRatio, 0.382, errorTolerance) or checkFibRatio(xbRatio, 0.5, errorTolerance)) and (checkFibRatio(acRatio, 0.382, errorTolerance) or checkFibRatio(acRatio, 0.886, errorTolerance)) and checkFibRatio(xdRatio, 0.886, errorTolerance)
+    isBat
+
+detectCrab(float x, float a, float b, float c, float d, int xBar, int aBar, int bBar, int cBar, int dBar, bool isBullish) =>
+    xaLen = math.abs(a - x)
+    abLen = math.abs(b - a)
+    bcLen = math.abs(c - b)
+    cdLen = math.abs(d - c)
+    xbRatio = abLen / xaLen
+    acRatio = bcLen / abLen
+    xdRatio = cdLen / xaLen
+    isCrab = (checkFibRatio(xbRatio, 0.382, errorTolerance) or checkFibRatio(xbRatio, 0.618, errorTolerance)) and (checkFibRatio(acRatio, 0.382, errorTolerance) or checkFibRatio(acRatio, 0.886, errorTolerance)) and checkFibRatio(xdRatio, 1.618, errorTolerance)
+    isCrab
+
+detectShark(float x, float a, float b, float c, float d, int xBar, int aBar, int bBar, int cBar, int dBar, bool isBullish) =>
+    xaLen = math.abs(a - x)
+    abLen = math.abs(b - a)
+    bcLen = math.abs(c - b)
+    cdLen = math.abs(d - c)
+    xbRatio = abLen / xaLen
+    acRatio = bcLen / abLen
+    ocRatio = math.abs(c - x) / xaLen
+    isShark = (checkFibRatio(xbRatio, 0.382, errorTolerance) or checkFibRatio(xbRatio, 0.618, errorTolerance)) and (checkFibRatio(acRatio, 1.13, errorTolerance) or checkFibRatio(acRatio, 1.618, errorTolerance)) and (checkFibRatio(ocRatio, 0.886, errorTolerance) or checkFibRatio(ocRatio, 1.13, errorTolerance))
+    isShark
+
+detectCypher(float x, float a, float b, float c, float d, int xBar, int aBar, int bBar, int cBar, int dBar, bool isBullish) =>
+    xaLen = math.abs(a - x)
+    abLen = math.abs(b - a)
+    bcLen = math.abs(c - b)
+    cdLen = math.abs(d - c)
+    xbRatio = abLen / xaLen
+    xcRatio = bcLen / xaLen
+    xdRatio = cdLen / xaLen
+    isCypher = (checkFibRatio(xbRatio, 0.382, errorTolerance) or checkFibRatio(xbRatio, 0.618, errorTolerance)) and (checkFibRatio(xcRatio, 1.272, errorTolerance) or checkFibRatio(xcRatio, 1.414, errorTolerance)) and checkFibRatio(xdRatio, 0.786, errorTolerance)
+    isCypher
+
+// ==================== GESTIONE PATTERN PENDENTI ====================
+type PatternData
+    string patternName
+    bool isBullish
+    int dBar
+    float dPrice
+    float cPrice
+    float xPrice
+    float aPrice
+    float bPrice
+    int xBar
+    int aBar
+    int bBar
+    int cBar
+    float rsiAtD
+    float macdAtD
+    float macdSignalAtD
+    string status  // "pending", "confirmed", "expired"
+    string patternID
+
+var array<PatternData> pendingPatterns = array.new<PatternData>(0)
+
+// Variabili per prevenire duplicati
+var int lastBullishEntryBar = 0
+var int lastBearishEntryBar = 0
+var string lastBullishPatternID = ""
+var string lastBearishPatternID = ""
+
+// Contatori per dashboard
+var int patternCount = 0
+var int bullishCount = 0
+var int bearishCount = 0
+var int confirmedCount = 0
+var int expiredCount = 0
+var string lastConfirmedPattern = ""
+
+// ==================== FUNZIONI DI CONFERMA ====================
+checkPriceConfirmation(bool isBullish, float dPrice) =>
+    if isBullish
+        close > dPrice  // Non ha rotto il minimo di D
+    else
+        close < dPrice  // Non ha rotto il massimo di D
+
+checkRSIConfirmation(bool isBullish, float rsiAtD, float currentRSI) =>
+    if isBullish
+        rsiAtD < rsiOversoldLevel and currentRSI > rsiBullishExit
+    else
+        rsiAtD > rsiOverboughtLevel and currentRSI < rsiBearishExit
+
+checkVolumeConfirmation() =>
+    volume > volMA * volumeMultiplier
+
+checkMACDConfirmation(bool isBullish) =>
+    crossDetected = false
+    for i = 0 to macdCrossLookback - 1
+        if isBullish
+            if ta.crossover(macdLine, signalLine)[i]
+                crossDetected := true
+                break
+        else
+            if ta.crossunder(macdLine, signalLine)[i]
+                crossDetected := true
+                break
+    crossDetected
+
+// ==================== SCANSIONE E DETECTION PATTERN ====================
+if array.size(highPoints) >= 3 and array.size(lowPoints) >= 3
+    // Pattern Bullish (XABCD dove X=low, A=high, B=low, C=high, D=low)
+    for i = 0 to math.min(array.size(lowPoints) - 3, 10)
+        if array.size(lowPoints) > i + 2 and array.size(highPoints) > i + 1
+            x = array.get(lowPoints, i + 2)
+            a = array.get(highPoints, i + 1)
+            b = array.get(lowPoints, i + 1)
+            c = array.get(highPoints, i)
+            d = array.get(lowPoints, i)
+            
+            xBar = array.get(lowBars, i + 2)
+            aBar = array.get(highBars, i + 1)
+            bBar = array.get(lowBars, i + 1)
+            cBar = array.get(highBars, i)
+            dBar = array.get(lowBars, i)
+            
+            if xBar < aBar and aBar < bBar and bBar < cBar and cBar < dBar
+                isGartley = showGartley and detectGartley(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, true)
+                isButterfly = showButterfly and detectButterfly(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, true)
+                isBat = showBat and detectBat(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, true)
+                isCrab = showCrab and detectCrab(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, true)
+                isShark = showShark and detectShark(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, true)
+                isCypher = showCypher and detectCypher(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, true)
+                
+                if isGartley or isButterfly or isBat or isCrab or isShark or isCypher
+                    patternName = isGartley ? "Gartley" : isButterfly ? "Butterfly" : isBat ? "Bat" : isCrab ? "Crab" : isShark ? "Shark" : "Cypher"
+                    patternID = str.tostring(dBar) + "_" + patternName + "_BULL"
+                    
+                    // Verifica se pattern già esistente
+                    alreadyExists = false
+                    for j = 0 to array.size(pendingPatterns) - 1
+                        existingPattern = array.get(pendingPatterns, j)
+                        if existingPattern.patternID == patternID
+                            alreadyExists := true
+                            break
+                    
+                    if not alreadyExists
+                        // Salva pattern come pending
+                        newPattern = PatternData.new(
+                             patternName, true, dBar, d, c, x, a, b, 
+                             xBar, aBar, bBar, cBar,
+                             rsi[bar_index - dBar], 
+                             macdLine[bar_index - dBar], 
+                             signalLine[bar_index - dBar],
+                             "pending", patternID)
+                        
+                        array.push(pendingPatterns, newPattern)
+                        patternCount += 1
+                        bullishCount += 1
+                        
+                        // Disegna pattern SBIADITO
+                        line.new(xBar, x, aBar, a, color=color.new(color.green, 70), width=1, style=line.style_dashed)
+                        line.new(aBar, a, bBar, b, color=color.new(color.green, 70), width=1, style=line.style_dashed)
+                        line.new(bBar, b, cBar, c, color=color.new(color.green, 70), width=1, style=line.style_dashed)
+                        line.new(cBar, c, dBar, d, color=color.new(color.green, 70), width=1, style=line.style_dashed)
+                        
+                        label.new(dBar, d, "⏳ " + patternName + " PENDING", 
+                                 style=label.style_label_up, 
+                                 color=color.new(color.gray, 50), 
+                                 textcolor=color.white, 
+                                 size=size.small)
+                    
+                    break
+    
+    // Pattern Bearish (XABCD dove X=high, A=low, B=high, C=low, D=high)
+    for i = 0 to math.min(array.size(highPoints) - 3, 10)
+        if array.size(highPoints) > i + 2 and array.size(lowPoints) > i + 1
+            x = array.get(highPoints, i + 2)
+            a = array.get(lowBars, i + 1)
+            b = array.get(highBars, i + 1)
+            c = array.get(lowBars, i)
+            d = array.get(highBars, i)
+            
+            xBar = array.get(highBars, i + 2)
+            aBar = array.get(lowBars, i + 1)
+            bBar = array.get(highBars, i + 1)
+            cBar = array.get(lowBars, i)
+            dBar = array.get(highBars, i)
+            
+            if xBar < aBar and aBar < bBar and bBar < cBar and cBar < dBar
+                isGartley = showGartley and detectGartley(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, false)
+                isButterfly = showButterfly and detectButterfly(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, false)
+                isBat = showBat and detectBat(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, false)
+                isCrab = showCrab and detectCrab(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, false)
+                isShark = showShark and detectShark(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, false)
+                isCypher = showCypher and detectCypher(x, a, b, c, d, xBar, aBar, bBar, cBar, dBar, false)
+                
+                if isGartley or isButterfly or isBat or isCrab or isShark or isCypher
+                    patternName = isGartley ? "Gartley" : isButterfly ? "Butterfly" : isBat ? "Bat" : isCrab ? "Crab" : isShark ? "Shark" : "Cypher"
+                    patternID = str.tostring(dBar) + "_" + patternName + "_BEAR"
+                    
+                    // Verifica se pattern già esistente
+                    alreadyExists = false
+                    for j = 0 to array.size(pendingPatterns) - 1
+                        existingPattern = array.get(pendingPatterns, j)
+                        if existingPattern.patternID == patternID
+                            alreadyExists := true
+                            break
+                    
+                    if not alreadyExists
+                        // Salva pattern come pending
+                        newPattern = PatternData.new(
+                             patternName, false, dBar, d, c, x, a, b,
+                             xBar, aBar, bBar, cBar,
+                             rsi[bar_index - dBar], 
+                             macdLine[bar_index - dBar], 
+                             signalLine[bar_index - dBar],
+                             "pending", patternID)
+                        
+                        array.push(pendingPatterns, newPattern)
+                        patternCount += 1
+                        bearishCount += 1
+                        
+                        // Disegna pattern SBIADITO
+                        line.new(xBar, x, aBar, a, color=color.new(color.red, 70), width=1, style=line.style_dashed)
+                        line.new(aBar, a, bBar, b, color=color.new(color.red, 70), width=1, style=line.style_dashed)
+                        line.new(bBar, b, cBar, c, color=color.new(color.red, 70), width=1, style=line.style_dashed)
+                        line.new(cBar, c, dBar, d, color=color.new(color.red, 70), width=1, style=line.style_dashed)
+                        
+                        label.new(dBar, d, "⏳ " + patternName + " PENDING", 
+                                 style=label.style_label_down, 
+                                 color=color.new(color.gray, 50), 
+                                 textcolor=color.white, 
+                                 size=size.small)
+                    
+                    break
+
+// ==================== VERIFICA CONFERME SU PATTERN PENDENTI ====================
+if array.size(pendingPatterns) > 0
+    for i = array.size(pendingPatterns) - 1 to 0
+        pattern = array.get(pendingPatterns, i)
+        
+        if pattern.status == "pending"
+            // Verifica se siamo sulla PRIMA candela dopo D
+            if bar_index == pattern.dBar + 1
+                // Check tutte le conferme
+                priceOK = checkPriceConfirmation(pattern.isBullish, pattern.dPrice)
+                rsiOK = checkRSIConfirmation(pattern.isBullish, pattern.rsiAtD, rsi)
+                volumeOK = checkVolumeConfirmation()
+                macdOK = checkMACDConfirmation(pattern.isBullish)
+                
+                // TUTTE le conferme devono essere OK
+                allConfirmed = priceOK and rsiOK and volumeOK and macdOK
+                
+                if allConfirmed
+                    // Verifica duplicati
+                    isDuplicate = false
+                    if pattern.isBullish
+                        if bar_index == lastBullishEntryBar or pattern.patternID == lastBullishPatternID
+                            isDuplicate := true
+                    else
+                        if bar_index == lastBearishEntryBar or pattern.patternID == lastBearishPatternID
+                            isDuplicate := true
+                    
+                    if not isDuplicate
+                        // SEGNALE CONFERMATO!
+                        pattern.status := "confirmed"
+                        confirmedCount += 1
+                        lastConfirmedPattern := pattern.patternName + (pattern.isBullish ? " Bullish" : " Bearish")
+                        
+                        // Aggiorna tracking duplicati
+                        if pattern.isBullish
+                            lastBullishEntryBar := bar_index
+                            lastBullishPatternID := pattern.patternID
+                        else
+                            lastBearishEntryBar := bar_index
+                            lastBearishPatternID := pattern.patternID
+                        
+                        // Calcola livelli di trading
+                        cdMove = math.abs(pattern.dPrice - pattern.cPrice)
+                        entryPrice = close
+                        
+                        if pattern.isBullish
+                            slDistance = cdMove * (stopLossPercent / 100)
+                            slPrice = pattern.dPrice - slDistance
+                            tp1 = pattern.dPrice + (cdMove * 0.382)
+                            tp2 = pattern.dPrice + (cdMove * 0.618)
+                            tp3 = pattern.cPrice
+                            
+                            // Disegna pattern PIENO
+                            line.new(pattern.xBar, pattern.xPrice, pattern.aBar, pattern.aPrice, color=color.new(color.green, 0), width=2)
+                            line.new(pattern.aBar, pattern.aPrice, pattern.bBar, pattern.bPrice, color=color.new(color.green, 0), width=2)
+                            line.new(pattern.bBar, pattern.bPrice, pattern.cBar, pattern.cPrice, color=color.new(color.green, 0), width=2)
+                            line.new(pattern.cBar, pattern.cPrice, pattern.dBar, pattern.dPrice, color=color.new(color.green, 0), width=2)
+                            
+                            // Disegna livelli
+                            line.new(bar_index, entryPrice, bar_index + 10, entryPrice, color=color.new(color.blue, 0), width=2, style=line.style_solid)
+                            line.new(bar_index, slPrice, bar_index + 10, slPrice, color=color.new(color.red, 0), width=2, style=line.style_solid)
+                            line.new(bar_index, tp1, bar_index + 10, tp1, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+                            line.new(bar_index, tp2, bar_index + 10, tp2, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+                            line.new(bar_index, tp3, bar_index + 10, tp3, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+                            
+                            // Label completa
+                            labelText = "🟢 " + pattern.patternName + " LONG ✓\n" +
+                                       "━━━━━━━━━━━━━━━━\n" +
+                                       "📍 Entry: " + str.tostring(entryPrice, format.mintick) + "\n" +
+                                       "🛑 Stop Loss: " + str.tostring(slPrice, format.mintick) + "\n" +
+                                       "━━━━━━━━━━━━━━━━\n" +
+                                       "🎯 TP1 (38.2%): " + str.tostring(tp1, format.mintick) + "\n" +
+                                       "🎯 TP2 (61.8%): " + str.tostring(tp2, format.mintick) + "\n" +
+                                       "🎯 TP3 (100%): " + str.tostring(tp3, format.mintick) + "\n" +
+                                       "━━━━━━━━━━━━━━━━\n" +
+                                       "✓ RSI: " + str.tostring(rsi, "#.#") + "\n" +
+                                       "✓ Vol: " + str.tostring(volume/volMA, "#.#") + "x\n" +
+                                       "✓ MACD Cross"
+                            
+                            label.new(bar_index, low, labelText, 
+                                     style=label.style_label_up, 
+                                     color=color.new(color.green, 20), 
+                                     textcolor=color.white, 
+                                     size=size.normal)
+                        else
+                            slDistance = cdMove * (stopLossPercent / 100)
+                            slPrice = pattern.dPrice + slDistance
+                            tp1 = pattern.dPrice - (cdMove * 0.382)
+                            tp2 = pattern.dPrice - (cdMove * 0.618)
+                            tp3 = pattern.cPrice
+                            
+                            // Disegna pattern PIENO
+                            line.new(pattern.xBar, pattern.xPrice, pattern.aBar, pattern.aPrice, color=color.new(color.red, 0), width=2)
+                            line.new(pattern.aBar, pattern.aPrice, pattern.bBar, pattern.bPrice, color=color.new(color.red, 0), width=2)
+                            line.new(pattern.bBar, pattern.bPrice, pattern.cBar, pattern.cPrice, color=color.new(color.red, 0), width=2)
+                            line.new(pattern.cBar, pattern.cPrice, pattern.dBar, pattern.dPrice, color=color.new(color.red, 0), width=2)
+                            
+                            // Disegna livelli
+                            line.new(bar_index, entryPrice, bar_index + 10, entryPrice, color=color.new(color.blue, 0), width=2, style=line.style_solid)
+                            line.new(bar_index, slPrice, bar_index + 10, slPrice, color=color.new(color.red, 0), width=2, style=line.style_solid)
+                            line.new(bar_index, tp1, bar_index + 10, tp1, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+                            line.new(bar_index, tp2, bar_index + 10, tp2, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+                            line.new(bar_index, tp3, bar_index + 10, tp3, color=color.new(color.green, 30), width=1, style=line.style_dashed)
+                            
+                            // Label completa
+                            labelText = "🔴 " + pattern.patternName + " SHORT ✓\n" +
+                                       "━━━━━━━━━━━━━━━━\n" +
+                                       "📍 Entry: " + str.tostring(entryPrice, format.mintick) + "\n" +
+                                       "🛑 Stop Loss: " + str.tostring(slPrice, format.mintick) + "\n" +
+                                       "━━━━━━━━━━━━━━━━\n" +
+                                       "🎯 TP1 (38.2%): " + str.tostring(tp1, format.mintick) + "\n" +
+                                       "🎯 TP2 (61.8%): " + str.tostring(tp2, format.mintick) + "\n" +
+                                       "🎯 TP3 (100%): " + str.tostring(tp3, format.mintick) + "\n" +
+                                       "━━━━━━━━━━━━━━━━\n" +
+                                       "✓ RSI: " + str.tostring(rsi, "#.#") + "\n" +
+                                       "✓ Vol: " + str.tostring(volume/volMA, "#.#") + "x\n" +
+                                       "✓ MACD Cross"
+                            
+                            label.new(bar_index, high, labelText, 
+                                     style=label.style_label_down, 
+                                     color=color.new(color.red, 20), 
+                                     textcolor=color.white, 
+                                     size=size.normal)
+                        
+                        // Alert
+                        alert("Pattern " + pattern.patternName + (pattern.isBullish ? " BULLISH" : " BEARISH") + " confermato! Entry: " + str.tostring(entryPrice))
+                
+                else
+                    // Pattern NON confermato = EXPIRED
+                    pattern.status := "expired"
+                    expiredCount += 1
+                    
+                    if showExpiredPatterns
+                        // Disegna in GRIGIO
+                        line.new(pattern.xBar, pattern.xPrice, pattern.aBar, pattern.aPrice, color=color.new(color.gray, 50), width=1, style=line.style_dotted)
+                        line.new(pattern.aBar, pattern.aPrice, pattern.bBar, pattern.bPrice, color=color.new(color.gray, 50), width=1, style=line.style_dotted)
+                        line.new(pattern.bBar, pattern.bPrice, pattern.cBar, pattern.cPrice, color=color.new(color.gray, 50), width=1, style=line.style_dotted)
+                        line.new(pattern.cBar, pattern.cPrice, pattern.dBar, pattern.dPrice, color=color.new(color.gray, 50), width=1, style=line.style_dotted)
+                        
+                        // Diagnostica: quale conferma è fallita?
+                        failReason = ""
+                        if not priceOK
+                            failReason := "Prezzo"
+                        else if not rsiOK
+                            failReason := "RSI"
+                        else if not volumeOK
+                            failReason := "Volume"
+                        else if not macdOK
+                            failReason := "MACD"
+                        
+                        labelStyle = pattern.isBullish ? label.style_label_up : label.style_label_down
+                        label.new(bar_index, pattern.isBullish ? low : high, 
+                                 "❌ " + pattern.patternName + " NON CONFERMATO\nFallito: " + failReason, 
+                                 style=labelStyle, 
+                                 color=color.new(color.gray, 50), 
+                                 textcolor=color.white, 
+                                 size=size.small)
+
+// ==================== DASHBOARD ====================
+if showDashboard
+    var table dashboard = table.new(
+         dashPosition == "Top Right" ? position.top_right : 
+         dashPosition == "Top Left" ? position.top_left : 
+         dashPosition == "Bottom Right" ? position.bottom_right : position.bottom_left,
+         2, 18, border_width=2, border_color=color.gray, frame_width=2, frame_color=color.gray)
+    
+    if barstate.islast
+        // Header
+        table.cell(dashboard, 0, 0, "Pattern Armonici + Conferme", text_color=color.white, 
+                  bgcolor=color.new(color.blue, 20), text_size=size.normal)
+        table.merge_cells(dashboard, 0, 0, 1, 0)
+        
+        // Info Pattern
+        table.cell(dashboard, 0, 1, "Ultimo Confermato:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 1, lastConfirmedPattern != "" ? lastConfirmedPattern : "Nessuno", 
+                  text_color=str.contains(lastConfirmedPattern, "Bullish") ? color.green : str.contains(lastConfirmedPattern, "Bearish") ? color.red : color.gray,
+                  text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 2, "Pattern Rilevati:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 2, str.tostring(patternCount), text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 3, "  • Bullish:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 3, str.tostring(bullishCount), text_color=color.green, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 4, "  • Bearish:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 4, str.tostring(bearishCount), text_color=color.red, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 5, "Pattern Confermati:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 5, str.tostring(confirmedCount), text_color=color.lime, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 6, "Pattern Scartati:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 6, str.tostring(expiredCount), text_color=color.orange, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        // Tasso di successo
+        successRate = patternCount > 0 ? (confirmedCount / patternCount) * 100 : 0
+        table.cell(dashboard, 0, 7, "Tasso Conferma:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 7, str.tostring(successRate, "#.#") + "%", 
+                  text_color=successRate > 50 ? color.lime : successRate > 30 ? color.yellow : color.orange, 
+                  text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        // Separatore
+        table.cell(dashboard, 0, 8, "━━━━━━━━━━━━━━", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.merge_cells(dashboard, 0, 8, 1, 8)
+        
+        // Conferme Attive
+        table.cell(dashboard, 0, 9, "Filtri di Conferma", text_color=color.white, text_size=size.small, bgcolor=color.new(color.purple, 60))
+        table.merge_cells(dashboard, 0, 9, 1, 9)
+        
+        table.cell(dashboard, 0, 10, "✓ Prezzo", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 10, "Non rompe D", text_color=color.lime, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 11, "✓ RSI", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        rsiStatus = rsi > rsiOverboughtLevel ? "Ipercomprato" : rsi < rsiOversoldLevel ? "Ipervenduto" : "Neutrale"
+        rsiColor = rsi > rsiOverboughtLevel ? color.red : rsi < rsiOversoldLevel ? color.green : color.gray
+        table.cell(dashboard, 1, 11, str.tostring(rsi, "#.#") + " - " + rsiStatus, text_color=rsiColor, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 12, "✓ Volume", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        volRatio = volume / volMA
+        volColor = volRatio > volumeMultiplier ? color.lime : color.orange
+        table.cell(dashboard, 1, 12, str.tostring(volRatio, "#.#") + "x (>" + str.tostring(volumeMultiplier, "#.#") + "x)", 
+                  text_color=volColor, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 13, "✓ MACD", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        macdStatus = macdLine > signalLine ? "Bullish" : "Bearish"
+        macdColor = macdLine > signalLine ? color.green : color.red
+        table.cell(dashboard, 1, 13, macdStatus, text_color=macdColor, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        // Separatore
+        table.cell(dashboard, 0, 14, "━━━━━━━━━━━━━━", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.merge_cells(dashboard, 0, 14, 1, 14)
+        
+        // Impostazioni
+        table.cell(dashboard, 0, 15, "Impostazioni", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 60))
+        table.merge_cells(dashboard, 0, 15, 1, 15)
+        
+        table.cell(dashboard, 0, 16, "Finestra Entry:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 16, "1 candela post-D", text_color=color.yellow, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        
+        table.cell(dashboard, 0, 17, "Stop Loss:", text_color=color.gray, text_size=size.small, bgcolor=color.new(color.gray, 90))
+        table.cell(dashboard, 1, 17, str.tostring(stopLossPercent) + "% da D", text_color=color.red, text_size=size.small, bgcolor=color.new(color.gray, 90))
+
+// ==================== ALERT ====================
+alertcondition(confirmedCount > confirmedCount[1], title="Pattern Confermato", message="Nuovo pattern armonico confermato con tutte le conferme!")
+
+// Plot per alert
+plotConfirmed = confirmedCount > confirmedCount[1] ? close : na
+plot(plotConfirmed, title="Confirmed Signal", color=color.new(color.lime, 100))
