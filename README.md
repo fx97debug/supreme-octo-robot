@@ -1,2 +1,11 @@
 # supreme-octo-robot
+
+**[Leggi in Italiano / Read in Italian](README.it.md)** 🇮🇹
+
 HI, I'M SILVIO AND I DON'T KNOW IF YOU KNOW ME. I'VE ALWAYS USED CHAT AND YOU KNOW ME WELL. IF I'M NOT MISUNDERSTANDING, HERE I'M DESCRIBING THE BASIC GENERATION FROM MY THOUGHTS AND YOU START GENERATING THE RIGHT CODE? IF YES, WE START BY CREATING A CODE FOR A STRATEGY THAT I THEN APPLY ON TRADING VIEWS. TELL ME YES AND THEN I'LL PROCEED.
+
+---
+
+**YES, PERFECT! YOU CAN TALK TO ME IN ITALIAN!**
+
+Welcome! I'm ready to help you create trading strategies for TradingView. We can communicate completely in Italian. See [README.it.md](README.it.md) for Italian documentation.
